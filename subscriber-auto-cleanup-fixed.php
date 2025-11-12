@@ -226,11 +226,11 @@ class SubscriberAutoCleanup {
             $sanitized['total_deleted'] = 0;
         }
 
-        // Reschedule cron if needed
+        // Reschedule cron if needed - pass the new sanitized settings
         if (is_array($current) && (
             $sanitized['enabled'] !== $current['enabled'] ||
             $sanitized['interval'] !== $current['interval'])) {
-            $this->schedule_cleanup();
+            $this->schedule_cleanup($sanitized);
         }
 
         return $sanitized;
@@ -268,9 +268,13 @@ class SubscriberAutoCleanup {
 
     /**
      * Schedule the cleanup based on settings
+     *
+     * @param array $settings Optional settings array. If not provided, reads from database.
      */
-    private function schedule_cleanup() {
-        $settings = get_option($this->option_name);
+    private function schedule_cleanup($settings = null) {
+        if ($settings === null) {
+            $settings = get_option($this->option_name);
+        }
 
         // Clear existing schedule
         wp_clear_scheduled_hook($this->cron_hook);
