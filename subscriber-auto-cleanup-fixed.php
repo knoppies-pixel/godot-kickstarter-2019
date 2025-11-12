@@ -323,6 +323,13 @@ class SubscriberAutoCleanup {
      */
     public function cleanup_subscribers($test_mode = false) {
         $settings = get_option($this->option_name);
+
+        // Defensive check - ensure settings exist
+        if (!is_array($settings)) {
+            error_log('[Subscriber Cleanup] Settings not found - plugin may not be activated properly');
+            return array('count' => 0, 'users' => array(), 'test_mode' => $test_mode);
+        }
+
         $deleted_users = array();
         $deleted_count = 0;
 
@@ -552,8 +559,13 @@ class SubscriberAutoCleanup {
             $this->handle_manual_cleanup();
         }
 
-        // Get settings and stats
+        // Get settings and stats - ensure defaults exist even if activation hook never ran
         $settings = get_option($this->option_name);
+        if (!is_array($settings)) {
+            // Settings don't exist - create them now (defensive programming)
+            $this->activate();
+            $settings = get_option($this->option_name);
+        }
         $user_count = $this->get_cached_user_count();
         $subscriber_count = isset($user_count['avail_roles']['subscriber']) ?
                            $user_count['avail_roles']['subscriber'] : 0;
