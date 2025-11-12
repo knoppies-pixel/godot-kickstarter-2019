@@ -227,9 +227,10 @@ class SubscriberAutoCleanup {
         }
 
         // Reschedule cron if needed - pass the new sanitized settings
-        if (is_array($current) && (
+        // Always reschedule if $current is invalid, or if enabled/interval changed
+        if (!is_array($current) ||
             $sanitized['enabled'] !== $current['enabled'] ||
-            $sanitized['interval'] !== $current['interval'])) {
+            $sanitized['interval'] !== $current['interval']) {
             $this->schedule_cleanup($sanitized);
         }
 
