@@ -228,10 +228,15 @@ class SubscriberAutoCleanup {
 
         // Reschedule cron if needed - pass the new sanitized settings
         // Always reschedule if $current is invalid, or if enabled/interval changed
+        error_log('[SAC] Checking if reschedule needed. Current interval: ' . (is_array($current) && isset($current['interval']) ? $current['interval'] : 'NONE') . ', New interval: ' . $sanitized['interval']);
+
         if (!is_array($current) ||
             $sanitized['enabled'] !== $current['enabled'] ||
             $sanitized['interval'] !== $current['interval']) {
+            error_log('[SAC] Reschedule triggered! Calling schedule_cleanup()');
             $this->schedule_cleanup($sanitized);
+        } else {
+            error_log('[SAC] No reschedule needed - settings unchanged');
         }
 
         return $sanitized;
@@ -277,14 +282,25 @@ class SubscriberAutoCleanup {
             $settings = get_option($this->option_name);
         }
 
+        // Debug logging
+        error_log('[SAC] schedule_cleanup called with interval: ' . (isset($settings['interval']) ? $settings['interval'] : 'NOT SET'));
+
         // Clear existing schedule
+        $old_schedule = wp_next_scheduled($this->cron_hook);
+        if ($old_schedule) {
+            error_log('[SAC] Clearing old schedule that was set for: ' . date('Y-m-d H:i:s', $old_schedule));
+        }
         wp_clear_scheduled_hook($this->cron_hook);
 
         // Only schedule if enabled
         if ($settings && isset($settings['enabled']) && $settings['enabled']) {
             if (!wp_next_scheduled($this->cron_hook)) {
-                wp_schedule_event(time(), $settings['interval'], $this->cron_hook);
+                $result = wp_schedule_event(time(), $settings['interval'], $this->cron_hook);
+                $new_schedule = wp_next_scheduled($this->cron_hook);
+                error_log('[SAC] Scheduled new cron for: ' . date('Y-m-d H:i:s', $new_schedule) . ' with interval: ' . $settings['interval']);
             }
+        } else {
+            error_log('[SAC] Not scheduling - enabled=' . (isset($settings['enabled']) ? ($settings['enabled'] ? 'true' : 'false') : 'NOT SET'));
         }
     }
 
