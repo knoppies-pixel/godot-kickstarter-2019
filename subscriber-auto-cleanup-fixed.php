@@ -39,9 +39,6 @@ class SubscriberAutoCleanup {
         add_action('wp_ajax_sac_test_cleanup', array($this, 'ajax_test_cleanup'));
         add_action('wp_ajax_sac_get_stats', array($this, 'ajax_get_stats'));
 
-        // Custom cron schedules
-        add_filter('cron_schedules', array($this, 'add_custom_schedules'));
-
         // Clear user count cache when users are added/deleted
         add_action('deleted_user', array($this, 'clear_user_count_cache'));
         add_action('user_register', array($this, 'clear_user_count_cache'));
@@ -64,43 +61,6 @@ class SubscriberAutoCleanup {
             set_transient('sac_user_count', $user_count, 5 * MINUTE_IN_SECONDS);
         }
         return $user_count;
-    }
-
-    /**
-     * Add custom cron schedules
-     */
-    public function add_custom_schedules($schedules) {
-        $schedules['every_5_minutes'] = array(
-            'interval' => 300,
-            'display' => __('Every 5 Minutes', 'subscriber-auto-cleanup')
-        );
-
-        $schedules['every_15_minutes'] = array(
-            'interval' => 900,
-            'display' => __('Every 15 Minutes', 'subscriber-auto-cleanup')
-        );
-
-        $schedules['every_30_minutes'] = array(
-            'interval' => 1800,
-            'display' => __('Every 30 Minutes', 'subscriber-auto-cleanup')
-        );
-
-        $schedules['every_2_hours'] = array(
-            'interval' => 7200,
-            'display' => __('Every 2 Hours', 'subscriber-auto-cleanup')
-        );
-
-        $schedules['every_6_hours'] = array(
-            'interval' => 21600,
-            'display' => __('Every 6 Hours', 'subscriber-auto-cleanup')
-        );
-
-        $schedules['every_3_days'] = array(
-            'interval' => 259200,
-            'display' => __('Every 3 Days', 'subscriber-auto-cleanup')
-        );
-
-        return $schedules;
     }
 
     /**
@@ -166,16 +126,8 @@ class SubscriberAutoCleanup {
         $sanitized['log_deletions'] = isset($input['log_deletions']) ? (bool)$input['log_deletions'] : false;
         $sanitized['email_notification'] = isset($input['email_notification']) ? (bool)$input['email_notification'] : false;
 
-        // String fields
-        $sanitized['interval'] = isset($input['interval']) ? sanitize_text_field($input['interval']) : 'daily';
-
-        // Validate interval
-        $valid_intervals = array('every_5_minutes', 'every_15_minutes', 'every_30_minutes',
-                                'hourly', 'every_2_hours', 'every_6_hours', 'twicedaily',
-                                'daily', 'every_3_days', 'weekly');
-        if (!in_array($sanitized['interval'], $valid_intervals)) {
-            $sanitized['interval'] = 'daily';
-        }
+        // Force interval to always be daily
+        $sanitized['interval'] = 'daily';
 
         // Integer fields
         $sanitized['min_age_hours'] = isset($input['min_age_hours']) ? absint($input['min_age_hours']) : 24;
@@ -227,12 +179,8 @@ class SubscriberAutoCleanup {
         }
 
         // Reschedule cron if needed - pass the new sanitized settings
-        // Always reschedule if $current is invalid, or if enabled/interval changed
-        error_log('[SAC] Checking if reschedule needed. Current interval: ' . (is_array($current) && isset($current['interval']) ? $current['interval'] : 'NONE') . ', New interval: ' . $sanitized['interval']);
-
-        if (!is_array($current) ||
-            $sanitized['enabled'] !== $current['enabled'] ||
-            $sanitized['interval'] !== $current['interval']) {
+        // Always reschedule if $current is invalid, or if enabled status changed
+        if (!is_array($current) || $sanitized['enabled'] !== $current['enabled']) {
             error_log('[SAC] Reschedule triggered! Calling schedule_cleanup()');
             $this->schedule_cleanup($sanitized);
         } else {
@@ -589,22 +537,11 @@ class SubscriberAutoCleanup {
 
         // Calculate next run time
         $next_run = wp_next_scheduled($this->cron_hook);
-
-        // Check for aggressive schedule warning
-        $aggressive_schedules = array('every_5_minutes', 'every_15_minutes', 'every_30_minutes');
-        $show_warning = in_array($settings['interval'], $aggressive_schedules);
         ?>
         <div class="wrap">
             <h1><?php echo esc_html__('Subscriber Auto Cleanup', 'subscriber-auto-cleanup'); ?></h1>
 
             <?php settings_errors('sac_messages'); ?>
-
-            <?php if ($show_warning && $settings['enabled']): ?>
-            <div class="notice notice-warning">
-                <p><strong><?php esc_html_e('Warning:', 'subscriber-auto-cleanup'); ?></strong>
-                <?php esc_html_e('You have selected a very frequent cleanup schedule. Please ensure this is intentional to avoid excessive server load.', 'subscriber-auto-cleanup'); ?></p>
-            </div>
-            <?php endif; ?>
 
             <!-- Dashboard -->
             <div class="sac-dashboard">
@@ -663,18 +600,8 @@ class SubscriberAutoCleanup {
                             <tr>
                                 <th scope="row"><?php esc_html_e('Cleanup Schedule', 'subscriber-auto-cleanup'); ?></th>
                                 <td>
-                                    <select name="<?php echo esc_attr($this->option_name); ?>[interval]">
-                                        <option value="every_5_minutes" <?php selected($settings['interval'], 'every_5_minutes'); ?>><?php esc_html_e('Every 5 Minutes ⚠️ Very Aggressive', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="every_15_minutes" <?php selected($settings['interval'], 'every_15_minutes'); ?>><?php esc_html_e('Every 15 Minutes ⚠️ Aggressive', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="every_30_minutes" <?php selected($settings['interval'], 'every_30_minutes'); ?>><?php esc_html_e('Every 30 Minutes ⚠️ Aggressive', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="hourly" <?php selected($settings['interval'], 'hourly'); ?>><?php esc_html_e('Hourly', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="every_2_hours" <?php selected($settings['interval'], 'every_2_hours'); ?>><?php esc_html_e('Every 2 Hours', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="every_6_hours" <?php selected($settings['interval'], 'every_6_hours'); ?>><?php esc_html_e('Every 6 Hours', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="twicedaily" <?php selected($settings['interval'], 'twicedaily'); ?>><?php esc_html_e('Twice Daily', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="daily" <?php selected($settings['interval'], 'daily'); ?>><?php esc_html_e('Daily (Recommended)', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="every_3_days" <?php selected($settings['interval'], 'every_3_days'); ?>><?php esc_html_e('Every 3 Days', 'subscriber-auto-cleanup'); ?></option>
-                                        <option value="weekly" <?php selected($settings['interval'], 'weekly'); ?>><?php esc_html_e('Weekly', 'subscriber-auto-cleanup'); ?></option>
-                                    </select>
+                                    <strong><?php esc_html_e('Daily', 'subscriber-auto-cleanup'); ?></strong>
+                                    <p class="description"><?php esc_html_e('Automatic cleanup runs once per day', 'subscriber-auto-cleanup'); ?></p>
                                 </td>
                             </tr>
 
